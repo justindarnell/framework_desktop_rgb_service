@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "JqmFudn6a8Q=",
+  "success": true,
+  "projectFilePath": "/home/runner/work/framework_desktop_rgb_service/framework_desktop_rgb_service/src/FrameworkDesktopRgbService/FrameworkDesktopRgbService.csproj",
+  "expectedPackageFiles": [
+    "/home/runner/.nuget/packages/microsoft.windowsdesktop.app.ref/8.0.22/microsoft.windowsdesktop.app.ref.8.0.22.nupkg.sha512"
+  ],
+  "logs": []
+}
