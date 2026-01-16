@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace FrameworkDesktopRgbService;
 
@@ -13,7 +15,7 @@ public sealed class TrayAppContext : ApplicationContext
     private readonly object _configLock = new();
     private readonly object _ctsLock = new();
     private AppConfig _config;
-    private CancellationTokenSource? _startupCts;
+    private CancellationTokenSource? _animationCts;
 
     public TrayAppContext()
     {
@@ -31,6 +33,7 @@ public sealed class TrayAppContext : ApplicationContext
                 ContextMenuStrip = BuildMenu(),
             };
 
+            SystemEvents.PowerModeChanged += OnPowerModeChanged;
             ApplyLastPresetWithRetry();
         }
         catch (Exception ex)
@@ -83,6 +86,9 @@ public sealed class TrayAppContext : ApplicationContext
         var reloadConfig = new ToolStripMenuItem("Reload Config");
         reloadConfig.Click += (_, _) => ReloadConfig();
 
+        var managePresets = new ToolStripMenuItem("Manage Presets...");
+        managePresets.Click += (_, _) => OpenPresetEditor();
+
         var exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += (_, _) => ExitThread();
 
@@ -90,6 +96,7 @@ public sealed class TrayAppContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(openConfig);
         menu.Items.Add(reloadConfig);
+        menu.Items.Add(managePresets);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
 
@@ -103,15 +110,15 @@ public sealed class TrayAppContext : ApplicationContext
             CancellationTokenSource cts;
             lock (_ctsLock)
             {
-                var oldCts = _startupCts;
+                var oldCts = _animationCts;
                 if (oldCts is not null)
                 {
                     oldCts.Cancel();
                     oldCts.Dispose();
                 }
 
-                _startupCts = new CancellationTokenSource();
-                cts = _startupCts;
+                _animationCts = new CancellationTokenSource();
+                cts = _animationCts;
             }
 
             AppConfig config;
@@ -166,7 +173,16 @@ public sealed class TrayAppContext : ApplicationContext
             config = _config;
         }
 
-        var result = await _rgbController.ApplyPresetAsync(preset, CancellationToken.None);
+        CancellationTokenSource cts;
+        lock (_ctsLock)
+        {
+            _animationCts?.Cancel();
+            _animationCts?.Dispose();
+            _animationCts = new CancellationTokenSource();
+            cts = _animationCts;
+        }
+
+        var result = await _rgbController.ApplyPresetAsync(preset, cts.Token);
         if (!result.Succeeded)
         {
             Notify("RGB apply failed", result.ErrorMessage ?? "Unknown error.", ToolTipIcon.Error);
@@ -241,11 +257,11 @@ public sealed class TrayAppContext : ApplicationContext
         // Cancel and dispose any running startup operation before reloading
         lock (_ctsLock)
         {
-            if (_startupCts is not null)
+            if (_animationCts is not null)
             {
-                _startupCts.Cancel();
-                _startupCts.Dispose();
-                _startupCts = null;
+                _animationCts.Cancel();
+                _animationCts.Dispose();
+                _animationCts = null;
             }
         }
 
@@ -260,6 +276,17 @@ public sealed class TrayAppContext : ApplicationContext
         ApplyLastPresetWithRetry();
     }
 
+    private void OpenPresetEditor()
+    {
+        using var editor = new PresetEditorForm(_configService);
+        editor.ShowDialog();
+
+        if (editor.ConfigChanged)
+        {
+            ReloadConfig();
+        }
+    }
+
     private void Notify(string title, string message, ToolTipIcon icon)
     {
         _trayIcon.ShowBalloonTip(BalloonTipTimeout, title, message, icon);
@@ -269,16 +296,26 @@ public sealed class TrayAppContext : ApplicationContext
     {
         lock (_ctsLock)
         {
-            if (_startupCts is not null)
+            if (_animationCts is not null)
             {
-                _startupCts.Cancel();
-                _startupCts.Dispose();
-                _startupCts = null;
+                _animationCts.Cancel();
+                _animationCts.Dispose();
+                _animationCts = null;
             }
         }
+
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
 
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
         base.ExitThreadCore();
+    }
+
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Resume)
+        {
+            ApplyLastPresetWithRetry();
+        }
     }
 }
