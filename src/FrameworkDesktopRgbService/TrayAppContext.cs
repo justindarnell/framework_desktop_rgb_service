@@ -70,7 +70,8 @@ public sealed class TrayAppContext : ApplicationContext
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Error applying preset: {ex}");
-                    _trayIcon.BeginInvoke(() => Notify("RGB apply failed", $"Error applying preset: {ex.Message}", ToolTipIcon.Error));
+                    var errorMessage = $"Error applying preset: {ex.Message}";
+                    _trayIcon.BeginInvoke(() => Notify("RGB apply failed", errorMessage, ToolTipIcon.Error));
                 }
             };
             presetMenu.DropDownItems.Add(item);

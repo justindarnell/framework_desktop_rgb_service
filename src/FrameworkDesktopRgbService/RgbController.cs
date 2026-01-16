@@ -57,7 +57,12 @@ public sealed class RgbController
                     var error = await stdErrTask;
                     var output = await stdOutTask;
                     var errorDetails = string.Join(Environment.NewLine, new[] { error, output }.Where(s => !string.IsNullOrWhiteSpace(s)));
-                    return ApplyResult.Failure($"framework_tool exited with code {process.ExitCode}.{(string.IsNullOrWhiteSpace(errorDetails) ? string.Empty : $" {errorDetails}")}");
+                    var message = $"framework_tool exited with code {process.ExitCode}.";
+                    if (!string.IsNullOrWhiteSpace(errorDetails))
+                    {
+                        message += $" {errorDetails}";
+                    }
+                    return ApplyResult.Failure(message);
                 }
             }
             else
