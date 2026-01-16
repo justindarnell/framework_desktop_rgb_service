@@ -45,9 +45,11 @@ public sealed class RgbController
 
             if (!requireElevation)
             {
+                // Start reading streams immediately to prevent buffer overflow
                 var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
                 var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-                await Task.WhenAll(process.WaitForExitAsync(cancellationToken), stdOutTask, stdErrTask);
+                
+                await process.WaitForExitAsync(cancellationToken);
 
                 if (process.ExitCode != 0)
                 {

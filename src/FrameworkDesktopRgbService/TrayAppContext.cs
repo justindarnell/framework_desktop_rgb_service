@@ -11,6 +11,7 @@ public sealed class TrayAppContext : ApplicationContext
     private readonly ConfigService _configService;
     private readonly RgbController _rgbController;
     private readonly object _configLock = new();
+    private readonly object _ctsLock = new();
     private AppConfig _config;
     private CancellationTokenSource? _startupCts;
 
@@ -98,14 +99,19 @@ public sealed class TrayAppContext : ApplicationContext
     {
         try
         {
-            var oldCts = _startupCts;
-            if (oldCts is not null)
+            CancellationTokenSource cts;
+            lock (_ctsLock)
             {
-                oldCts.Cancel();
-                oldCts.Dispose();
-            }
+                var oldCts = _startupCts;
+                if (oldCts is not null)
+                {
+                    oldCts.Cancel();
+                    oldCts.Dispose();
+                }
 
-            _startupCts = new CancellationTokenSource();
+                _startupCts = new CancellationTokenSource();
+                cts = _startupCts;
+            }
 
             AppConfig config;
             lock (_configLock)
@@ -129,7 +135,7 @@ public sealed class TrayAppContext : ApplicationContext
                     config.FrameworkToolPath,
                     preset,
                     config.RequireElevation,
-                    _startupCts.Token);
+                    cts.Token);
                 if (result.Succeeded)
                 {
                     return;
@@ -141,7 +147,7 @@ public sealed class TrayAppContext : ApplicationContext
                     return;
                 }
 
-                await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, config.RetryDelaySeconds)), _startupCts.Token);
+                await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, config.RetryDelaySeconds)), cts.Token);
             }
         }
         catch (OperationCanceledException)
@@ -240,7 +246,10 @@ public sealed class TrayAppContext : ApplicationContext
     private void ReloadConfig()
     {
         // Cancel any running startup operation but proceed with reload
-        _startupCts?.Cancel();
+        lock (_ctsLock)
+        {
+            _startupCts?.Cancel();
+        }
 
         lock (_configLock)
         {
@@ -260,11 +269,14 @@ public sealed class TrayAppContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
-        if (_startupCts is not null)
+        lock (_ctsLock)
         {
-            _startupCts.Cancel();
-            _startupCts.Dispose();
-            _startupCts = null;
+            if (_startupCts is not null)
+            {
+                _startupCts.Cancel();
+                _startupCts.Dispose();
+                _startupCts = null;
+            }
         }
 
         _trayIcon.Visible = false;
