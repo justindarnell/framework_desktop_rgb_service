@@ -248,10 +248,8 @@ public sealed class TrayAppContext : ApplicationContext
         }
 
         var oldMenu = _trayIcon.ContextMenuStrip;
-        _trayIcon.ContextMenuStrip = null;
-        oldMenu?.Dispose();
-
         _trayIcon.ContextMenuStrip = BuildMenu();
+        oldMenu?.Dispose();
         ApplyLastPresetWithRetry();
     }
 
@@ -262,7 +260,7 @@ public sealed class TrayAppContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
-        if (_startupCts != null)
+        if (_startupCts is not null)
         {
             _startupCts.Cancel();
             _startupCts.Dispose();
