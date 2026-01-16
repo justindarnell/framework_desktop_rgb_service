@@ -10,7 +10,7 @@ public static class CrosEcDevice
     private const string DevicePath = "\\\\.\\GLOBALROOT\\Device\\CrosEC";
     private const int EcRgbKbdMaxKeyCount = 64;
     private const int CrosEcCmdMaxRequest = 0x100;
-    private const int HeaderLength = 8;
+    private const int HeaderLength = 20;
     private const ushort EcCommandRgbKbdSetColor = 0x013A;
     private const uint FileGenericRead = 0x80000000;
     private const uint FileGenericWrite = 0x40000000;
@@ -106,7 +106,7 @@ public static class CrosEcDevice
 
     private static void SendCommand(SafeFileHandle handle, ushort command, byte commandVersion, byte[] payload)
     {
-        if (payload.Length > CrosEcCmdMaxRequest)
+        if (payload.Length > CrosEcCmdMaxRequest - HeaderLength)
         {
             throw new ArgumentOutOfRangeException(nameof(payload), "Payload exceeds maximum EC command size.");
         }
@@ -118,7 +118,7 @@ public static class CrosEcDevice
             OutSize = (uint)payload.Length,
             InSize = (uint)(CrosEcCmdMaxRequest - HeaderLength),
             Result = 0xFF,
-            Buffer = new byte[CrosEcCmdMaxRequest],
+            Buffer = new byte[CrosEcCmdMaxRequest - HeaderLength],
         };
 
         Array.Copy(payload, commandPacket.Buffer, payload.Length);
@@ -142,15 +142,11 @@ public static class CrosEcDevice
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to send EC command.");
             }
 
-            var response = Marshal.PtrToStructure<CrosEcCommand?>(commandPtr);
-            if (response is null)
-            {
-                throw new InvalidOperationException("Failed to marshal EC command response.");
-            }
+            var response = Marshal.PtrToStructure<CrosEcCommand>(commandPtr);
 
-            if (response.Value.Result != 0)
+            if (response.Result != 0)
             {
-                throw new InvalidOperationException($"EC command failed with status 0x{response.Value.Result:X}.");
+                throw new InvalidOperationException($"EC command failed with status 0x{response.Result:X}.");
             }
         }
         finally
@@ -167,12 +163,12 @@ public static class CrosEcDevice
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     private struct CrosEcCommand
     {
-        public byte Version;
-        public ushort Command;
+        public uint Version;
+        public uint Command;
         public uint OutSize;
         public uint InSize;
         public uint Result;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = CrosEcCmdMaxRequest)]
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = CrosEcCmdMaxRequest - HeaderLength)]
         public byte[] Buffer;
     }
 
