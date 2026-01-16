@@ -24,6 +24,7 @@ Example:
   "LastPresetName": "Default",
   "RetryCount": 5,
   "RetryDelaySeconds": 3,
+  "RequireElevation": true,
   "Presets": [
     {
       "Name": "Default",
@@ -46,6 +47,7 @@ Notes:
 - The Cooler Master ARGB fan has **8 LEDs**, so each preset must supply exactly **8 colors**.
 - Colors can be entered as `0xff0000` or `#ff0000`.
 - If `framework_tool.exe` is not in your PATH, set `FrameworkToolPath` to the full path.
+- `RequireElevation` prompts for UAC elevation when running `framework_tool.exe`. If you disable it, the tool must already be runnable without admin privileges.
 
 ## Usage
 

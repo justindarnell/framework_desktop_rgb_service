@@ -4,7 +4,11 @@ namespace FrameworkDesktopRgbService;
 
 public sealed class RgbController
 {
-    public async Task<ApplyResult> ApplyPresetAsync(string toolPath, RgbPreset preset, CancellationToken cancellationToken)
+    public async Task<ApplyResult> ApplyPresetAsync(
+        string toolPath,
+        RgbPreset preset,
+        bool requireElevation,
+        CancellationToken cancellationToken)
     {
         var colors = NormalizeColors(preset.Colors);
         if (colors.Count != 8)
@@ -17,10 +21,11 @@ public sealed class RgbController
         {
             FileName = toolPath,
             Arguments = args,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            UseShellExecute = requireElevation,
+            CreateNoWindow = !requireElevation,
+            RedirectStandardOutput = !requireElevation,
+            RedirectStandardError = !requireElevation,
+            Verb = requireElevation ? "runas" : string.Empty,
         };
 
         try
@@ -34,12 +39,21 @@ public sealed class RgbController
             await process.WaitForExitAsync(cancellationToken);
             if (process.ExitCode != 0)
             {
-                var error = await process.StandardError.ReadToEndAsync(cancellationToken);
-                var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-                return ApplyResult.Failure($"framework_tool exited with code {process.ExitCode}. {error}{output}");
+                if (!requireElevation)
+                {
+                    var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+                    var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+                    return ApplyResult.Failure($"framework_tool exited with code {process.ExitCode}. {error}{output}");
+                }
+
+                return ApplyResult.Failure($"framework_tool exited with code {process.ExitCode}.");
             }
 
             return ApplyResult.Success();
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            return ApplyResult.Failure("Elevation was canceled.");
         }
         catch (Exception ex)
         {

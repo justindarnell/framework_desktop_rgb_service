@@ -9,6 +9,7 @@ public sealed class AppConfig
     public string LastPresetName { get; set; } = "Default";
     public int RetryCount { get; set; } = 5;
     public int RetryDelaySeconds { get; set; } = 3;
+    public bool RequireElevation { get; set; } = true;
     public List<RgbPreset> Presets { get; set; } = new()
     {
         new RgbPreset

@@ -79,7 +79,11 @@ public sealed class TrayAppContext : ApplicationContext
         var attempts = Math.Max(1, _config.RetryCount);
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
-            var result = await _rgbController.ApplyPresetAsync(_config.FrameworkToolPath, preset, _startupCts.Token);
+            var result = await _rgbController.ApplyPresetAsync(
+                _config.FrameworkToolPath,
+                preset,
+                _config.RequireElevation,
+                _startupCts.Token);
             if (result.Succeeded)
             {
                 return;
@@ -97,7 +101,11 @@ public sealed class TrayAppContext : ApplicationContext
 
     private async Task ApplyPresetAsync(RgbPreset preset, bool updateLast)
     {
-        var result = await _rgbController.ApplyPresetAsync(_config.FrameworkToolPath, preset, CancellationToken.None);
+        var result = await _rgbController.ApplyPresetAsync(
+            _config.FrameworkToolPath,
+            preset,
+            _config.RequireElevation,
+            CancellationToken.None);
         if (!result.Succeeded)
         {
             Notify("RGB apply failed", result.ErrorMessage ?? "Unknown error.", ToolTipIcon.Error);
