@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Linq;
 using Microsoft.Win32.SafeHandles;
 
 namespace FrameworkDesktopRgbService;
@@ -134,19 +133,24 @@ public static class CrosEcDevice
                     handle,
                     IoctlCrosEcXcmd,
                     commandPtr,
-                    size - HeaderLength,
+                    size,
                     commandPtr,
-                    size - HeaderLength,
+                    size,
                     out var _,
                     IntPtr.Zero))
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to send EC command.");
             }
 
-            var response = Marshal.PtrToStructure<CrosEcCommand>(commandPtr);
-            if (response.Result != 0)
+            var response = Marshal.PtrToStructure<CrosEcCommand?>(commandPtr);
+            if (response is null)
             {
-                throw new InvalidOperationException($"EC command failed with status 0x{response.Result:X}.");
+                throw new InvalidOperationException("Failed to marshal EC command response.");
+            }
+
+            if (response.Value.Result != 0)
+            {
+                throw new InvalidOperationException($"EC command failed with status 0x{response.Value.Result:X}.");
             }
         }
         finally
@@ -163,8 +167,8 @@ public static class CrosEcDevice
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     private struct CrosEcCommand
     {
-        public uint Version;
-        public uint Command;
+        public byte Version;
+        public ushort Command;
         public uint OutSize;
         public uint InSize;
         public uint Result;

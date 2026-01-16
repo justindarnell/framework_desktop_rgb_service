@@ -1,0 +1,14 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio cache/options
+.vs/
+*.user
+*.suo
+*.userprefs
+
+# Build artifacts
+*.dll
+*.exe
+*.pdb
