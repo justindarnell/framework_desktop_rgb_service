@@ -47,13 +47,9 @@ public sealed class ConfigService
             var json = JsonSerializer.Serialize(config, AppConfig.JsonOptions);
             File.WriteAllText(ConfigPath, json);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new IOException($"Failed to save configuration to '{ConfigPath}'.", ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            throw new UnauthorizedAccessException($"Access denied while saving configuration to '{ConfigPath}'.", ex);
+            throw new InvalidOperationException($"Failed to save configuration to '{ConfigPath}'.", ex);
         }
     }
 }

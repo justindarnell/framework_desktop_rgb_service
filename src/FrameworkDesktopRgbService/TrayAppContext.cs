@@ -239,12 +239,8 @@ public sealed class TrayAppContext : ApplicationContext
 
     private void ReloadConfig()
     {
-        // Avoid starting a new startup/retry sequence while a previous one is still running.
-        if (_startupCts is not null && !_startupCts.IsCancellationRequested)
-        {
-            _startupCts.Cancel();
-            return;
-        }
+        // Cancel any running startup operation but proceed with reload
+        _startupCts?.Cancel();
 
         lock (_configLock)
         {
