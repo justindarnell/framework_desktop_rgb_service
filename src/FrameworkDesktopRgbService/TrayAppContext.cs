@@ -5,41 +5,75 @@ namespace FrameworkDesktopRgbService;
 
 public sealed class TrayAppContext : ApplicationContext
 {
+    private const int BalloonTipTimeout = 4000;
+
     private readonly NotifyIcon _trayIcon;
     private readonly ConfigService _configService;
     private readonly RgbController _rgbController;
+    private readonly object _configLock = new();
+    private readonly object _ctsLock = new();
     private AppConfig _config;
     private CancellationTokenSource? _startupCts;
 
     public TrayAppContext()
     {
-        _configService = new ConfigService();
-        _rgbController = new RgbController();
-        _config = _configService.Load();
-
-        _trayIcon = new NotifyIcon
+        try
         {
-            Icon = SystemIcons.Application,
-            Visible = true,
-            Text = "Framework Desktop RGB",
-            ContextMenuStrip = BuildMenu(),
-        };
+            _configService = new ConfigService();
+            _rgbController = new RgbController();
+            _config = _configService.Load();
 
-        ApplyLastPresetWithRetry();
+            _trayIcon = new NotifyIcon
+            {
+                Icon = SystemIcons.Application,
+                Visible = true,
+                Text = "Framework Desktop RGB",
+                ContextMenuStrip = BuildMenu(),
+            };
+
+            ApplyLastPresetWithRetry();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Failed to initialize Framework Desktop RGB Service: {ex.Message}",
+                "Initialization Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            throw;
+        }
     }
 
     private ContextMenuStrip BuildMenu()
     {
         var menu = new ContextMenuStrip();
 
+        AppConfig config;
+        lock (_configLock)
+        {
+            config = _config;
+        }
+
         var presetMenu = new ToolStripMenuItem("Presets");
-        foreach (var preset in _config.Presets)
+        foreach (var preset in config.Presets)
         {
             var item = new ToolStripMenuItem(preset.Name)
             {
-                Checked = string.Equals(preset.Name, _config.LastPresetName, StringComparison.OrdinalIgnoreCase),
+                Checked = string.Equals(preset.Name, config.LastPresetName, StringComparison.OrdinalIgnoreCase),
             };
-            item.Click += async (_, _) => await ApplyPresetAsync(preset, updateLast: true);
+            item.Click += async (_, _) =>
+            {
+                try
+                {
+                    await ApplyPresetAsync(preset, updateLast: true).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error applying preset: {ex}");
+                    var errorMessage = $"Error applying preset: {ex.Message}";
+                    _trayIcon.BeginInvoke(() => Notify("RGB apply failed", errorMessage, ToolTipIcon.Error));
+                }
+            };
             presetMenu.DropDownItems.Add(item);
         }
 
@@ -64,47 +98,82 @@ public sealed class TrayAppContext : ApplicationContext
 
     private async void ApplyLastPresetWithRetry()
     {
-        _startupCts?.Cancel();
-        _startupCts = new CancellationTokenSource();
-
-        var preset = _config.Presets.FirstOrDefault(p =>
-            string.Equals(p.Name, _config.LastPresetName, StringComparison.OrdinalIgnoreCase));
-
-        if (preset is null)
+        try
         {
-            Notify("RGB preset not found", "Last preset name does not match any configured preset.", ToolTipIcon.Warning);
-            return;
+            CancellationTokenSource cts;
+            lock (_ctsLock)
+            {
+                var oldCts = _startupCts;
+                if (oldCts is not null)
+                {
+                    oldCts.Cancel();
+                    oldCts.Dispose();
+                }
+
+                _startupCts = new CancellationTokenSource();
+                cts = _startupCts;
+            }
+
+            AppConfig config;
+            lock (_configLock)
+            {
+                config = _config;
+            }
+
+            var preset = config.Presets.FirstOrDefault(p =>
+                string.Equals(p.Name, config.LastPresetName, StringComparison.OrdinalIgnoreCase));
+
+            if (preset is null)
+            {
+                Notify("RGB preset not found", "Last preset name does not match any configured preset.", ToolTipIcon.Warning);
+                return;
+            }
+
+            var attempts = Math.Max(1, config.RetryCount);
+            for (var attempt = 1; attempt <= attempts; attempt++)
+            {
+                var result = await _rgbController.ApplyPresetAsync(
+                    config.FrameworkToolPath,
+                    preset,
+                    config.RequireElevation,
+                    cts.Token);
+                if (result.Succeeded)
+                {
+                    return;
+                }
+
+                if (attempt == attempts)
+                {
+                    Notify("RGB apply failed", result.ErrorMessage ?? "Unknown error.", ToolTipIcon.Error);
+                    return;
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, config.RetryDelaySeconds)), cts.Token);
+            }
         }
-
-        var attempts = Math.Max(1, _config.RetryCount);
-        for (var attempt = 1; attempt <= attempts; attempt++)
+        catch (OperationCanceledException)
         {
-            var result = await _rgbController.ApplyPresetAsync(
-                _config.FrameworkToolPath,
-                preset,
-                _config.RequireElevation,
-                _startupCts.Token);
-            if (result.Succeeded)
-            {
-                return;
-            }
-
-            if (attempt == attempts)
-            {
-                Notify("RGB apply failed", result.ErrorMessage ?? "Unknown error.", ToolTipIcon.Error);
-                return;
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, _config.RetryDelaySeconds)), _startupCts.Token);
+            // Startup operation was canceled (e.g., superseded by a new preset application); no further action needed.
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Unexpected error while applying RGB preset: {ex}");
+            Notify("RGB apply failed", "An unexpected error occurred while applying the RGB preset.", ToolTipIcon.Error);
         }
     }
 
     private async Task ApplyPresetAsync(RgbPreset preset, bool updateLast)
     {
+        AppConfig config;
+        lock (_configLock)
+        {
+            config = _config;
+        }
+
         var result = await _rgbController.ApplyPresetAsync(
-            _config.FrameworkToolPath,
+            config.FrameworkToolPath,
             preset,
-            _config.RequireElevation,
+            config.RequireElevation,
             CancellationToken.None);
         if (!result.Succeeded)
         {
@@ -114,8 +183,11 @@ public sealed class TrayAppContext : ApplicationContext
 
         if (updateLast)
         {
-            _config.LastPresetName = preset.Name;
-            _configService.Save(_config);
+            lock (_configLock)
+            {
+                _config.LastPresetName = preset.Name;
+                _configService.Save(_config);
+            }
         }
 
         UpdateMenuChecks();
@@ -128,45 +200,91 @@ public sealed class TrayAppContext : ApplicationContext
             return;
         }
 
-        foreach (ToolStripMenuItem item in _trayIcon.ContextMenuStrip.Items)
+        string? lastPresetName;
+        lock (_configLock)
         {
-            if (item.Text != "Presets")
+            lastPresetName = _config.LastPresetName;
+        }
+
+        foreach (ToolStripItem item in _trayIcon.ContextMenuStrip.Items)
+        {
+            if (item is not ToolStripMenuItem presetsMenuItem || presetsMenuItem.Text != "Presets")
             {
                 continue;
             }
 
-            foreach (ToolStripMenuItem presetItem in item.DropDownItems)
+            foreach (ToolStripItem presetItem in presetsMenuItem.DropDownItems)
             {
-                presetItem.Checked = string.Equals(presetItem.Text, _config.LastPresetName, StringComparison.OrdinalIgnoreCase);
+                if (presetItem is ToolStripMenuItem presetMenuItem)
+                {
+                    presetMenuItem.Checked = string.Equals(
+                        presetMenuItem.Text,
+                        lastPresetName,
+                        StringComparison.OrdinalIgnoreCase);
+                }
             }
         }
     }
 
     private void OpenConfigFolder()
     {
-        Directory.CreateDirectory(_configService.ConfigDirectory);
-        Process.Start(new ProcessStartInfo
+        try
         {
-            FileName = _configService.ConfigDirectory,
-            UseShellExecute = true,
-        });
+            Directory.CreateDirectory(_configService.ConfigDirectory);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _configService.ConfigDirectory,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to open config folder: {ex}");
+            Notify("Error", $"Failed to open config folder: {ex.Message}", ToolTipIcon.Error);
+        }
     }
 
     private void ReloadConfig()
     {
-        _config = _configService.Load();
+        // Cancel and dispose any running startup operation before reloading
+        lock (_ctsLock)
+        {
+            if (_startupCts is not null)
+            {
+                _startupCts.Cancel();
+                _startupCts.Dispose();
+                _startupCts = null;
+            }
+        }
+
+        lock (_configLock)
+        {
+            _config = _configService.Load();
+        }
+
+        var oldMenu = _trayIcon.ContextMenuStrip;
         _trayIcon.ContextMenuStrip = BuildMenu();
+        oldMenu?.Dispose();
         ApplyLastPresetWithRetry();
     }
 
     private void Notify(string title, string message, ToolTipIcon icon)
     {
-        _trayIcon.ShowBalloonTip(4000, title, message, icon);
+        _trayIcon.ShowBalloonTip(BalloonTipTimeout, title, message, icon);
     }
 
     protected override void ExitThreadCore()
     {
-        _startupCts?.Cancel();
+        lock (_ctsLock)
+        {
+            if (_startupCts is not null)
+            {
+                _startupCts.Cancel();
+                _startupCts.Dispose();
+                _startupCts = null;
+            }
+        }
+
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
         base.ExitThreadCore();

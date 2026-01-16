@@ -34,6 +34,15 @@ public sealed class AppConfig
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
+
+    public void Validate()
+    {
+        Presets ??= new List<RgbPreset>();
+        foreach (var preset in Presets)
+        {
+            preset.Colors ??= new List<string>();
+        }
+    }
 }
 
 public sealed class RgbPreset
