@@ -65,12 +65,12 @@ public sealed class TrayAppContext : ApplicationContext
             {
                 try
                 {
-                    await ApplyPresetAsync(preset, updateLast: true);
+                    await ApplyPresetAsync(preset, updateLast: true).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Error applying preset: {ex}");
-                    Notify("RGB apply failed", $"Error applying preset: {ex.Message}", ToolTipIcon.Error);
+                    _trayIcon.BeginInvoke(() => Notify("RGB apply failed", $"Error applying preset: {ex.Message}", ToolTipIcon.Error));
                 }
             };
             presetMenu.DropDownItems.Add(item);
@@ -245,10 +245,15 @@ public sealed class TrayAppContext : ApplicationContext
 
     private void ReloadConfig()
     {
-        // Cancel any running startup operation but proceed with reload
+        // Cancel and dispose any running startup operation before reloading
         lock (_ctsLock)
         {
-            _startupCts?.Cancel();
+            if (_startupCts is not null)
+            {
+                _startupCts.Cancel();
+                _startupCts.Dispose();
+                _startupCts = null;
+            }
         }
 
         lock (_configLock)
