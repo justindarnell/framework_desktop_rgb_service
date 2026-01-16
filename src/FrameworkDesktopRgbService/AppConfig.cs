@@ -24,6 +24,7 @@ public sealed class AppConfig
                 "0x8000ff",
                 "0xff00ff",
             },
+            Animation = "Static",
         },
         new RgbPreset
         {
@@ -39,6 +40,7 @@ public sealed class AppConfig
                 "0xff8000",
                 "0xff8000",
             },
+            Animation = "Static",
         },
         new RgbPreset
         {
@@ -54,6 +56,7 @@ public sealed class AppConfig
                 "0x0000ff",
                 "0x0000ff",
             },
+            Animation = "Static",
         },
     };
 
@@ -69,6 +72,7 @@ public sealed class AppConfig
         foreach (var preset in Presets)
         {
             preset.Colors ??= new List<string>();
+            preset.Animation ??= "Static";
         }
     }
 }
@@ -77,4 +81,5 @@ public sealed class RgbPreset
 {
     public string Name { get; set; } = string.Empty;
     public List<string> Colors { get; set; } = new();
+    public string Animation { get; set; } = "Static";
 }
