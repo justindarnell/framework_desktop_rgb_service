@@ -25,15 +25,35 @@ public sealed class ConfigService
             return defaultConfig;
         }
 
-        var json = File.ReadAllText(ConfigPath);
-        var config = JsonSerializer.Deserialize<AppConfig>(json, AppConfig.JsonOptions);
-        return config ?? new AppConfig();
+        try
+        {
+            var json = File.ReadAllText(ConfigPath);
+            var config = JsonSerializer.Deserialize<AppConfig>(json, AppConfig.JsonOptions);
+            var result = config ?? new AppConfig();
+            result.Validate();
+            return result;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            throw new InvalidOperationException($"Failed to load configuration from '{ConfigPath}'.", ex);
+        }
     }
 
     public void Save(AppConfig config)
     {
-        Directory.CreateDirectory(ConfigDirectory);
-        var json = JsonSerializer.Serialize(config, AppConfig.JsonOptions);
-        File.WriteAllText(ConfigPath, json);
+        try
+        {
+            Directory.CreateDirectory(ConfigDirectory);
+            var json = JsonSerializer.Serialize(config, AppConfig.JsonOptions);
+            File.WriteAllText(ConfigPath, json);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save configuration to '{ConfigPath}'.", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new UnauthorizedAccessException($"Access denied while saving configuration to '{ConfigPath}'.", ex);
+        }
     }
 }
