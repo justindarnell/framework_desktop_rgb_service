@@ -1,88 +1,33 @@
-using System.Diagnostics;
-
 namespace FrameworkDesktopRgbService;
 
 public sealed class RgbController
 {
     private const int LedCount = 8;
+    private const int StartKey = 0;
 
     public async Task<ApplyResult> ApplyPresetAsync(
-        string toolPath,
         RgbPreset preset,
-        bool requireElevation,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(toolPath))
-        {
-            return ApplyResult.Failure("The path to 'framework_tool' must be a non-empty string.");
-        }
-
         var colors = NormalizeColors(preset.Colors);
         if (colors.Count != LedCount)
         {
             return ApplyResult.Failure($"Preset '{preset.Name}' must contain exactly {LedCount} colors for the Framework Cooler Master ARGB fan.");
         }
 
-        var args = string.Join(' ', new[] { "--rgbkbd", "0" }.Concat(colors));
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = toolPath,
-            Arguments = args,
-            UseShellExecute = requireElevation,
-            CreateNoWindow = !requireElevation,
-            RedirectStandardOutput = !requireElevation,
-            RedirectStandardError = !requireElevation,
-            Verb = requireElevation ? "runas" : string.Empty,
-        };
-
         try
         {
-            using var process = Process.Start(startInfo);
-            if (process is null)
-            {
-                return ApplyResult.Failure("Failed to start framework_tool process.");
-            }
-
-            if (!requireElevation)
-            {
-                // Start reading streams immediately to prevent buffer overflow
-                // Use CancellationToken.None to ensure we read all output even if cancelled
-                var stdOutTask = process.StandardOutput.ReadToEndAsync();
-                var stdErrTask = process.StandardError.ReadToEndAsync();
-                
-                await process.WaitForExitAsync(cancellationToken);
-
-                if (process.ExitCode != 0)
-                {
-                    var error = await stdErrTask;
-                    var output = await stdOutTask;
-                    var errorDetails = string.Join(Environment.NewLine, new[] { error, output }.Where(s => !string.IsNullOrWhiteSpace(s)));
-                    var message = $"framework_tool exited with code {process.ExitCode}.";
-                    if (!string.IsNullOrWhiteSpace(errorDetails))
-                    {
-                        message += $" {errorDetails}";
-                    }
-                    return ApplyResult.Failure(message);
-                }
-            }
-            else
-            {
-                await process.WaitForExitAsync(cancellationToken);
-                if (process.ExitCode != 0)
-                {
-                    return ApplyResult.Failure($"framework_tool exited with code {process.ExitCode}.");
-                }
-            }
+            await CrosEcDevice.SetRgbKeyboardColorsAsync(StartKey, colors, cancellationToken);
 
             return ApplyResult.Success();
         }
-        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        catch (OperationCanceledException)
         {
-            return ApplyResult.Failure("Elevation was canceled.");
+            return ApplyResult.Failure("RGB apply was canceled.");
         }
         catch (Exception ex)
         {
-            return ApplyResult.Failure($"framework_tool failed: {ex.Message}");
+            return ApplyResult.Failure($"EC RGB update failed: {ex.Message}");
         }
     }
 

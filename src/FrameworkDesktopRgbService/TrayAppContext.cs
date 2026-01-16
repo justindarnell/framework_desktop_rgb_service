@@ -71,7 +71,7 @@ public sealed class TrayAppContext : ApplicationContext
                 {
                     Debug.WriteLine($"Error applying preset: {ex}");
                     var errorMessage = $"Error applying preset: {ex.Message}";
-                    _trayIcon.BeginInvoke(() => Notify("RGB apply failed", errorMessage, ToolTipIcon.Error));
+                    Notify("RGB apply failed", errorMessage, ToolTipIcon.Error);
                 }
             };
             presetMenu.DropDownItems.Add(item);
@@ -132,11 +132,7 @@ public sealed class TrayAppContext : ApplicationContext
             var attempts = Math.Max(1, config.RetryCount);
             for (var attempt = 1; attempt <= attempts; attempt++)
             {
-                var result = await _rgbController.ApplyPresetAsync(
-                    config.FrameworkToolPath,
-                    preset,
-                    config.RequireElevation,
-                    cts.Token);
+                var result = await _rgbController.ApplyPresetAsync(preset, cts.Token);
                 if (result.Succeeded)
                 {
                     return;
@@ -170,11 +166,7 @@ public sealed class TrayAppContext : ApplicationContext
             config = _config;
         }
 
-        var result = await _rgbController.ApplyPresetAsync(
-            config.FrameworkToolPath,
-            preset,
-            config.RequireElevation,
-            CancellationToken.None);
+        var result = await _rgbController.ApplyPresetAsync(preset, CancellationToken.None);
         if (!result.Succeeded)
         {
             Notify("RGB apply failed", result.ErrorMessage ?? "Unknown error.", ToolTipIcon.Error);
