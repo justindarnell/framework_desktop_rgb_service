@@ -1,12 +1,12 @@
 # framework_desktop_rgb_service
 
-This project is a Windows-only tray application that keeps the Framework Desktop RGB fan set to your preferred colors after reboot. It calls `framework_tool.exe` under the hood and stores presets in a local JSON config.
+This project is a Windows-only tray application that keeps the Framework Desktop RGB fan set to your preferred colors after reboot. It talks directly to the Framework EC driver and stores presets in a local JSON config.
 
 ## How it works
 
 - Runs as a **Windows tray app**.
 - Applies the last-used preset on startup, with retry logic.
-- Uses `framework_tool.exe --rgbkbd 0 <colors...>` to set the 8-LED Cooler Master ARGB fan.
+- Uses the Framework Windows EC driver to send RGB commands for the 8-LED Cooler Master ARGB fan.
 
 ## Project goals (for new contributors)
 
@@ -15,7 +15,7 @@ This project exists to:
 - Keep the Framework Desktop Cooler Master ARGB fan colors applied across reboots.
 - Provide a simple **tray-first** UX for selecting presets (no CLI).
 - Persist presets locally in JSON for easy editing.
-- Use Framework's `framework_tool.exe` initially, with a potential future move to a native/managed implementation if feasible.
+- Use a native/managed EC implementation to avoid external CLI dependencies.
 
 ## Configuration
 
@@ -29,11 +29,9 @@ Example:
 
 ```json
 {
-  "FrameworkToolPath": "framework_tool.exe",
   "LastPresetName": "Default",
   "RetryCount": 5,
   "RetryDelaySeconds": 3,
-  "RequireElevation": true,
   "Presets": [
     {
       "Name": "Default",
@@ -55,8 +53,7 @@ Example:
 Notes:
 - The Cooler Master ARGB fan has **8 LEDs**, so each preset must supply exactly **8 colors**.
 - Colors can be entered as `0xff0000` or `#ff0000`.
-- If `framework_tool.exe` is not in your PATH, set `FrameworkToolPath` to the full path.
-- `RequireElevation` prompts for UAC elevation when running `framework_tool.exe`. If you disable it, the tool must already be runnable without admin privileges.
+- The app requires the Framework Windows EC driver (CrosEC) to be installed and accessible at `\\.\GLOBALROOT\Device\CrosEC`.
 
 ## Usage
 
@@ -79,11 +76,7 @@ If you choose Option B, the task should:
 
 ## Dependencies
 
-Install Framework's tool via winget (or download the EXE and update the config path):
-
-```
-winget install FrameworkComputer.framework_tool
-```
+- Framework Windows EC driver (CrosEC) must be installed (via Framework driver/BIOS updates).
 
 ## Build (requires .NET 8 SDK)
 
@@ -93,6 +86,5 @@ dotnet build src/FrameworkDesktopRgbService/FrameworkDesktopRgbService.csproj
 
 ## Known limitations
 
-- Uses `framework_tool.exe` and therefore relies on its availability and permissions.
-- Elevation (UAC) prompts can appear on startup unless you run it with a scheduled task set to highest privileges.
+- Requires the Framework Windows EC driver to be installed and available.
 - No effects/animations yet (static colors only).

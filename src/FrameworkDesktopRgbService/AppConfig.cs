@@ -5,11 +5,9 @@ namespace FrameworkDesktopRgbService;
 
 public sealed class AppConfig
 {
-    public string FrameworkToolPath { get; set; } = "framework_tool.exe";
     public string LastPresetName { get; set; } = "Default";
     public int RetryCount { get; set; } = 5;
     public int RetryDelaySeconds { get; set; } = 3;
-    public bool RequireElevation { get; set; } = true;
     public List<RgbPreset> Presets { get; set; } = new()
     {
         new RgbPreset
@@ -25,6 +23,36 @@ public sealed class AppConfig
                 "0x0000ff",
                 "0x8000ff",
                 "0xff00ff",
+            },
+        },
+        new RgbPreset
+        {
+            Name = "All Orange",
+            Colors = new List<string>
+            {
+                "0xff8000",
+                "0xff8000",
+                "0xff8000",
+                "0xff8000",
+                "0xff8000",
+                "0xff8000",
+                "0xff8000",
+                "0xff8000",
+            },
+        },
+        new RgbPreset
+        {
+            Name = "All Blue",
+            Colors = new List<string>
+            {
+                "0x0000ff",
+                "0x0000ff",
+                "0x0000ff",
+                "0x0000ff",
+                "0x0000ff",
+                "0x0000ff",
+                "0x0000ff",
+                "0x0000ff",
             },
         },
     };
