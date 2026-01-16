@@ -8,6 +8,15 @@ This project is a Windows-only tray application that keeps the Framework Desktop
 - Applies the last-used preset on startup, with retry logic.
 - Uses `framework_tool.exe --rgbkbd 0 <colors...>` to set the 8-LED Cooler Master ARGB fan.
 
+## Project goals (for new contributors)
+
+This project exists to:
+
+- Keep the Framework Desktop Cooler Master ARGB fan colors applied across reboots.
+- Provide a simple **tray-first** UX for selecting presets (no CLI).
+- Persist presets locally in JSON for easy editing.
+- Use Framework's `framework_tool.exe` initially, with a potential future move to a native/managed implementation if feasible.
+
 ## Configuration
 
 On first run, a default config is created at:
@@ -56,6 +65,18 @@ Notes:
 - Use **Open Config Folder** to edit presets.
 - Use **Reload Config** after editing the JSON.
 
+## Startup behavior (recommended)
+
+To ensure the fan colors apply after every reboot:
+
+- **Option A (simple):** add this app to Windows Startup (Task Manager → Startup Apps or Settings → Apps → Startup).
+- **Option B (recommended for UAC):** create a Task Scheduler entry that runs the app with highest privileges at user logon.
+
+If you choose Option B, the task should:
+
+- Run **only when the user is logged on** (so the tray icon is available).
+- Be configured to **Run with highest privileges**.
+
 ## Dependencies
 
 Install Framework's tool via winget (or download the EXE and update the config path):
@@ -69,3 +90,9 @@ winget install FrameworkComputer.framework_tool
 ```
 dotnet build src/FrameworkDesktopRgbService/FrameworkDesktopRgbService.csproj
 ```
+
+## Known limitations
+
+- Uses `framework_tool.exe` and therefore relies on its availability and permissions.
+- Elevation (UAC) prompts can appear on startup unless you run it with a scheduled task set to highest privileges.
+- No effects/animations yet (static colors only).
